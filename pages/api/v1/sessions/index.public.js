@@ -43,17 +43,28 @@ function postValidationHandler(request, response, next) {
 }
 
 async function postHandler(request, response) {
+  const startTime = Date.now();
+  // Aguarda sempre 3 segundos para evitar variação de tempo
+  const now = Date.now();
+  const remaining = 3000 - (now - startTime);
+  if (remaining > 0) {
+    await new Promise((r) => setTimeout(r, remaining));
+  }
+
   const userTryingToCreateSession = request.context.user;
   const insecureInputValues = request.body;
-
   const secureInputValues = authorization.filterInput(userTryingToCreateSession, 'create:session', insecureInputValues);
 
-  // Compress all mismatch errors (email and password) into one single error.
   let storedUser;
+  let authError = null;
   try {
     storedUser = await user.findOneByEmail(secureInputValues.email);
     await authentication.comparePasswords(secureInputValues.password, storedUser.password);
   } catch (error) {
+    authError = error;
+  }
+
+  if (authError) {
     throw new UnauthorizedError({
       message: `Dados não conferem.`,
       action: `Verifique se os dados enviados estão corretos.`,
@@ -79,8 +90,6 @@ async function postHandler(request, response) {
   }
 
   const sessionObject = await authentication.createSessionAndSetCookies(storedUser.id, response);
-
   const secureOutputValues = authorization.filterOutput(storedUser, 'create:session', sessionObject);
-
   return response.status(201).json(secureOutputValues);
 }
