@@ -414,4 +414,43 @@ describe('POST /api/v1/sessions', () => {
       expect(responseBody.key).toBe('object');
     });
   });
+
+  describe('Timing attack prevention', () => {
+    test('Response time for valid and invalid user should be similar', async () => {
+      const validUser = await orchestrator.createUser({
+        email: 'timingtest@gmail.com',
+        password: 'ValidPassword123',
+      });
+      await orchestrator.activateUser(validUser);
+
+      const startValid = Date.now();
+      await fetch(`${orchestrator.webserverUrl}/api/v1/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'timingtest@gmail.com',
+          password: 'ValidPassword123',
+        }),
+      });
+      const validDuration = Date.now() - startValid;
+
+      const startInvalid = Date.now();
+      await fetch(`${orchestrator.webserverUrl}/api/v1/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'notfounduser@gmail.com',
+          password: 'AnyPassword123',
+        }),
+      });
+      const invalidDuration = Date.now() - startInvalid;
+
+      const diff = Math.abs(validDuration - invalidDuration);
+      // Espera que a diferença seja menor que 200ms
+      expect(diff).toBeLessThan(200);
+      // Espera que ambos estejam acima de 2.5s (2500ms)
+      expect(validDuration).toBeGreaterThanOrEqual(2500);
+      expect(invalidDuration).toBeGreaterThanOrEqual(2500);
+    });
+  });
 });
